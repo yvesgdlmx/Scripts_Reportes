@@ -1,7 +1,6 @@
 import csv
 import mysql.connector
 from datetime import datetime
-
 def parse_date(date_str):
     date_formats = [
         '%d/%m/%Y',    # 13/11/2024
@@ -19,7 +18,6 @@ def parse_date(date_str):
         except ValueError:
             continue
     raise ValueError(f"No se pudo parsear la fecha: {date_str}")
-
 def process_stations(input_file):
     station_counts = {}
     station_details = {}
@@ -28,7 +26,6 @@ def process_stations(input_file):
     now = datetime.now()
     current_date = now.strftime('%Y-%m-%d')
     current_time = now.strftime('%H:%M:%S')
-    
     with open(input_file, 'r') as file:
         reader = csv.reader(file, delimiter='\t')
         next(reader)  # Saltar la primera línea (encabezados)
@@ -42,19 +39,15 @@ def process_stations(input_file):
                     client = row[6]  # DIVISION (cliente)
                     sf_value = row[10]
                     fs_value = row[10]  # Valor F/S
-                    
                     station_key = f"{station}_{sf_value}"
-                    
                     if station_key not in station_counts:
                         station_counts[station_key] = 0
                         station_details[station_key] = []
                         client_counts[station_key] = {'NV': 0, 'HOYA': 0, 'INK': 0}
                         fs_counts[station_key] = {'F': 0, 'S': 0}
-                    
                     station_counts[station_key] += 1
                     station_details[station_key].append((enter_date, tray_number, current_station_date, 
-                                                     current_date, current_time, sf_value))
-                    
+                                                          current_date, current_time, sf_value))
                     # Contar por cliente
                     if client == 'NV':
                         client_counts[station_key]['NV'] += 1
@@ -62,20 +55,16 @@ def process_stations(input_file):
                         client_counts[station_key]['HOYA'] += 1
                     elif client == 'INK':
                         client_counts[station_key]['INK'] += 1
-                    
                     # Contar F/S
                     if fs_value == 'F':
                         fs_counts[station_key]['F'] += 1
                     elif fs_value == 'S':
                         fs_counts[station_key]['S'] += 1
-                        
                 except ValueError as e:
                     print(f"Error al procesar la fila: {e}")
                     print(f"Fila problemática: {row}")
                     continue
-                    
     return station_counts, station_details, client_counts, fs_counts
-
 try:
     connection = mysql.connector.connect(
         host='autorack.proxy.rlwy.net',
@@ -84,22 +73,23 @@ try:
         password='zsulNCCrYFSfBqIxwwIXIKqLQKFJWwbw',
         database='railway'
     )
-    
     if connection.is_connected():
         print("Conexión establecida exitosamente.")
         
     cursor = connection.cursor()
+    
+    # Truncar la tabla antes de insertar los nuevos datos
+    cursor.execute("TRUNCATE TABLE conteo_estaciones")
+    connection.commit()
+    
     input_file = 'I:/VISION/a_IP.txt'
-    
     station_counts, station_details, client_counts, fs_counts = process_stations(input_file)
-    
     data_to_insert = []
     for station_key, count in station_counts.items():
         first_record = station_details[station_key][0]
         station_name = station_key.rsplit('_', 1)[0]
         client_count = client_counts[station_key]
         fs_count = fs_counts[station_key]
-        
         data_to_insert.append((
             first_record[0],  # enter_date
             first_record[1],  # tray_number
@@ -115,7 +105,7 @@ try:
             fs_count['F'],    # conteo de F
             fs_count['S']     # conteo de S
         ))
-
+    
     sql_insert = """
     INSERT INTO conteo_estaciones (
         enter_date, tray_number, estacion, current_station_date, 
@@ -123,13 +113,10 @@ try:
     )
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
-    
     cursor.executemany(sql_insert, data_to_insert)
     connection.commit()
-    
     print(f"Número de estaciones procesadas: {len(data_to_insert)}")
     print("Datos insertados exitosamente.")
-    
     print("\nConteo de registros por estación y cliente:")
     for station_key, count in station_counts.items():
         station_name, sf_value = station_key.rsplit('_', 1)
@@ -138,7 +125,6 @@ try:
         print(f"{station_name} ({sf_value}): Total: {count}, "
               f"NV: {client_count['NV']}, HOYA: {client_count['HOYA']}, "
               f"INK: {client_count['INK']}, F: {fs_count['F']}, S: {fs_count['S']}")
-
 except mysql.connector.Error as err:
     print("Error al ejecutar el comando SQL:", err)
 finally:
@@ -147,5 +133,4 @@ finally:
     if 'connection' in locals() and connection.is_connected():
         connection.close()
         print("Conexión cerrada.")
-
 print("Proceso completado.")
