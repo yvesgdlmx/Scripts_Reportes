@@ -87,6 +87,9 @@ def process_reason_data(filename):
                         continue
                     time_str   = row[3].strip()   # TIME (índice 3)
                     traynumber = row[1].strip()   # TRAYNUM (índice 1)
+                    # Si traynumber está vacío, asignar el valor "0"
+                    if traynumber == "":
+                        traynumber = "0"
                     department = row[4].strip()   # Department (índice 4)
                     position   = row[5].strip()   # Position (índice 5)
                     reason     = row[6].strip()   # Reason (índice 6)
@@ -107,7 +110,6 @@ def process_reason_data(filename):
                     grupos[key]["parts"].add(part)
     except Exception as e:
         print(f"Error al procesar el archivo para datos de razón: {e}")
-        
     fecha_actual = datetime.now().strftime('%Y-%m-%d')
     registros = []
     for (final_time, reason, traynumber, department, position), info in grupos.items():
