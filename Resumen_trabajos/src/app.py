@@ -1,7 +1,6 @@
 import csv
 import mysql.connector
 from datetime import datetime
-
 def get_rounded_time(current_time):
     hour = current_time.hour
     minute = current_time.minute
@@ -13,7 +12,6 @@ def get_rounded_time(current_time):
             hour = hour - 1
             rounded_minute = 30
     return f"{hour:02d}:{rounded_minute:02d}:00"
-
 def parse_date(date_str):
     date_formats = [
         '%m/%d/%Y',    # 01/13/2025
@@ -31,7 +29,6 @@ def parse_date(date_str):
             continue
     print(f"No se pudo parsear la fecha: {date_str}")
     return None
-
 def process_stations_file(filename):
     # Lista de estaciones permitidas
     estaciones_permitidas = {
@@ -43,7 +40,6 @@ def process_stations_file(filename):
         "Q-HOYA BAD PICK", "Q-LENS ISSUE", "Q-INK", "Q-HIPWR", "Q-HOYA NO QOH", "Q-INK NO QOH",
         "Q-JAI KUDO JOBS", "OPTIMEX", "INK LIFT OPTICS", "166 POLY AR F", "167 CR AR F", "168 CR 75",
     }
-    
     station_counts = {}
     print(f"Procesando archivo de estaciones: {filename}")
     try:
@@ -63,7 +59,6 @@ def process_stations_file(filename):
     except Exception as e:
         print(f"Error procesando archivo de estaciones: {str(e)}")
     return station_counts
-
 def process_summary_file(filename, station_counts):
     summary_data = []
     print(f"Procesando archivo de resumen: {filename}")
@@ -78,15 +73,12 @@ def process_summary_file(filename, station_counts):
                         nvi_fs = int(float(row[2].strip())) if row[2].strip() else 0
                         nvi_total_term = int(float(row[3].strip()))
                         nvi_total_ster = int(float(row[4].strip()))
-
                         # Obtener valores de no_surtido_term y no_surtido_ster del archivo de estaciones
                         no_surtido_term = station_counts.get((fecha, 'F'), 0)
                         no_surtido_ster = station_counts.get((fecha, 'S'), 0)
-
                         # Calcular los valores de surtido_term y surtido_ster
                         surtido_term = nvi_total_term - no_surtido_term
                         surtido_ster = nvi_total_ster - no_surtido_ster
-
                         summary_data.append({
                             'fecha': fecha,
                             'nvi_en_proceso': int(float(row[1].strip())),
@@ -107,7 +99,6 @@ def process_summary_file(filename, station_counts):
     except Exception as e:
         print(f"Error procesando archivo de resumen: {str(e)}")
     return summary_data
-
 try:
     connection = mysql.connector.connect(
         host='autorack.proxy.rlwy.net',
@@ -122,53 +113,76 @@ try:
     
     stations_file = 'I:/VISION/A_INARFD.txt'
     station_counts = process_stations_file(stations_file)
-    
     summary_file = 'I:/VISION/A_INARF1.txt'
     summary_data = process_summary_file(summary_file, station_counts)
     
     now = datetime.now()
     current_date = now.strftime('%Y-%m-%d')
-    rounded_time = get_rounded_time(now)
     
-    sql_insert_summary = """
-    INSERT INTO resumen_nvis
-    (fecha, nvi_en_proceso, nvi_fs, nvi_total_term, nvi_total_ster, 
-     no_surtido_term, no_surtido_ster, surtido_term, surtido_ster,
-     nvi_con_ar, nvi_ar_term, nvi_ar_semi, nvi_sin_ar, nvi_sin_ar_term, nvi_sin_ar_semi,
-     fecha_insercion, hora_insercion)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ON DUPLICATE KEY UPDATE
-    nvi_en_proceso = VALUES(nvi_en_proceso),
-    nvi_fs = VALUES(nvi_fs),
-    nvi_total_term = VALUES(nvi_total_term),
-    nvi_total_ster = VALUES(nvi_total_ster),
-    no_surtido_term = VALUES(no_surtido_term),
-    no_surtido_ster = VALUES(no_surtido_ster),
-    surtido_term = VALUES(surtido_term),
-    surtido_ster = VALUES(surtido_ster),
-    nvi_con_ar = VALUES(nvi_con_ar),
-    nvi_ar_term = VALUES(nvi_ar_term),
-    nvi_ar_semi = VALUES(nvi_ar_semi),
-    nvi_sin_ar = VALUES(nvi_sin_ar),
-    nvi_sin_ar_term = VALUES(nvi_sin_ar_term),
-    nvi_sin_ar_semi = VALUES(nvi_sin_ar_semi),
-    fecha_insercion = VALUES(fecha_insercion),
-    hora_insercion = VALUES(hora_insercion)
-    """
+    # Determinar el turno según la hora actual
+    diurno_inicio = datetime.strptime("06:30", "%H:%M").time()
+    diurno_fin = datetime.strptime("22:00", "%H:%M").time()
+    current_time = now.time()
+    if diurno_inicio <= current_time < diurno_fin:
+        turno = "diurno"
+    else:
+        turno = "nocturno"
     
-    data_to_insert_summary = [
-        (item['fecha'], item['nvi_en_proceso'], item['nvi_fs'], item['nvi_total_term'], item['nvi_total_ster'], 
-         item['no_surtido_term'], item['no_surtido_ster'], item['surtido_term'], item['surtido_ster'],
-         item['nvi_con_ar'], item['nvi_ar_term'], item['nvi_ar_semi'], item['nvi_sin_ar'], item['nvi_sin_ar_term'], 
-         item['nvi_sin_ar_semi'], current_date, rounded_time)
-        for item in summary_data
-    ]
+    # Condicionales para evitar inserciones en ciertos rangos de minutos
+    skip_insertion = False
+    if turno == "diurno" and 0 <= now.minute <= 10:
+        print("Turno diurno: No se insertarán datos si se ejecuta entre los minutos 00 y 10.")
+        skip_insertion = True
+    elif turno == "nocturno" and 30 <= now.minute <= 40:
+        print("Turno nocturno: No se insertarán datos si se ejecuta entre los minutos 30 y 40.")
+        skip_insertion = True
     
-    if data_to_insert_summary:
-        cursor.executemany(sql_insert_summary, data_to_insert_summary)
-        print(f"Se procesaron {len(data_to_insert_summary)} registros de resumen")
+    # Definir la hora de inserción según el turno:
+    if turno == "diurno":
+        hora_insercion = get_rounded_time(now)
+    else:
+        # Durante el nocturno se inserta la hora cerrada (minutos a 00)
+        hora_insercion = now.strftime("%H:00:00")
     
-    connection.commit()
+    if not skip_insertion:
+        sql_insert_summary = """
+        INSERT INTO resumen_nvis
+        (fecha, nvi_en_proceso, nvi_fs, nvi_total_term, nvi_total_ster, 
+         no_surtido_term, no_surtido_ster, surtido_term, surtido_ster,
+         nvi_con_ar, nvi_ar_term, nvi_ar_semi, nvi_sin_ar, nvi_sin_ar_term, nvi_sin_ar_semi,
+         fecha_insercion, hora_insercion)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            nvi_en_proceso = VALUES(nvi_en_proceso),
+            nvi_fs = VALUES(nvi_fs),
+            nvi_total_term = VALUES(nvi_total_term),
+            nvi_total_ster = VALUES(nvi_total_ster),
+            no_surtido_term = VALUES(no_surtido_term),
+            no_surtido_ster = VALUES(no_surtido_ster),
+            surtido_term = VALUES(surtido_term),
+            surtido_ster = VALUES(surtido_ster),
+            nvi_con_ar = VALUES(nvi_con_ar),
+            nvi_ar_term = VALUES(nvi_ar_term),
+            nvi_ar_semi = VALUES(nvi_ar_semi),
+            nvi_sin_ar = VALUES(nvi_sin_ar),
+            nvi_sin_ar_term = VALUES(nvi_sin_ar_term),
+            nvi_sin_ar_semi = VALUES(nvi_sin_ar_semi),
+            fecha_insercion = VALUES(fecha_insercion),
+            hora_insercion = VALUES(hora_insercion)
+        """
+        data_to_insert_summary = [
+            (item['fecha'], item['nvi_en_proceso'], item['nvi_fs'], item['nvi_total_term'], item['nvi_total_ster'], 
+             item['no_surtido_term'], item['no_surtido_ster'], item['surtido_term'], item['surtido_ster'],
+             item['nvi_con_ar'], item['nvi_ar_term'], item['nvi_ar_semi'], item['nvi_sin_ar'], item['nvi_sin_ar_term'], 
+             item['nvi_sin_ar_semi'], current_date, hora_insercion)
+            for item in summary_data
+        ]
+        if data_to_insert_summary:
+            cursor.executemany(sql_insert_summary, data_to_insert_summary)
+            print(f"Se procesaron {len(data_to_insert_summary)} registros de resumen")
+        connection.commit()
+    else:
+        print("Se evitó la inserción de datos debido a la validación del turno.")
 except mysql.connector.Error as error:
     print(f"Error con la base de datos: {error}")
 finally:

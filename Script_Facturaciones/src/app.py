@@ -420,10 +420,11 @@ def main_hoya():
                 trabajos_ar_standard, precio_ar_standard, trabajos_ar_premium, precio_ar_premium, total_precio)
     try:
         conexion = mysql.connector.connect(
-            host='localhost',
+            host='autorack.proxy.rlwy.net',
+            port=22723,
             user='root',
-            password='luis',
-            database='optimex'
+            password='zsulNCCrYFSfBqIxwwIXIKqLQKFJWwbw',
+            database='railway'
         )
         cursor = conexion.cursor()
         sql_insert = """
@@ -579,10 +580,11 @@ def main_ink():
         return
     try:
         conexion = mysql.connector.connect(
-            host='localhost',
+            host='autorack.proxy.rlwy.net',
+            port=22723,
             user='root',
-            password='luis',
-            database='optimex'
+            password='zsulNCCrYFSfBqIxwwIXIKqLQKFJWwbw',
+            database='railway'
         )
         cursor = conexion.cursor()
         # Obtenemos el número de semana a partir del día actual
