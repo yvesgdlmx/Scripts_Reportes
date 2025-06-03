@@ -50,6 +50,11 @@ def process_time_data(filename):
                 # Validación: si existe la columna "part" (índice 8) y su valor es "frame", se salta el registro.
                 if len(row) > 8 and row[8].strip().lower() == "frame":
                     continue
+                # Filtrar registros que contengan MERMA DE ARMAZON o REWORK en department (se asume índice 4)
+                if len(row) > 4:
+                    department = row[4].strip()
+                    if department.upper() in ["MERMA DE ARMAZON", "REWORK"]:
+                        continue
                 if len(row) > 3:
                     time_str = row[3].strip()
                     try:
@@ -63,7 +68,6 @@ def process_time_data(filename):
                     grupos[final_time] = grupos.get(final_time, 0) + 1
     except Exception as e:
         print(f"Error al procesar el archivo para datos de hora: {e}")
-        
     fecha_actual = datetime.now().strftime('%Y-%m-%d')
     registros_agrupados = [(fecha_actual, hora, total) for hora, total in grupos.items()]
     return registros_agrupados
@@ -80,17 +84,21 @@ def process_reason_data(filename):
             reader = csv.reader(file, delimiter=',')
             header = next(reader)  # asumimos que la cabecera contiene los nombres de columna
             for row in reader:
-                # Verificar que existan al menos 9 columnas (0 a 8)
+                # Verificar que existan al menos 9 columnas (índices 0 a 8)
                 if len(row) > 8:
                     # Si el valor de la columna "part" es "frame", se ignora el registro.
                     if row[8].strip().lower() == "frame":
+                        continue
+                    # Procesar y filtrar por Department.
+                    department = row[4].strip()
+                    # Convertimos a mayúsculas para hacer una comparación case-insensitive.
+                    if department.upper() in ["MERMA DE ARMAZON", "REWORK"]:
                         continue
                     time_str   = row[3].strip()   # TIME (índice 3)
                     traynumber = row[1].strip()   # TRAYNUM (índice 1)
                     # Si traynumber está vacío, asignar el valor "0"
                     if traynumber == "":
                         traynumber = "0"
-                    department = row[4].strip()   # Department (índice 4)
                     position   = row[5].strip()   # Position (índice 5)
                     reason     = row[6].strip()   # Reason (índice 6)
                     part       = row[8].strip()   # Part (índice 8)

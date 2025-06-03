@@ -618,17 +618,15 @@ def main_ink():
             # Orden de los datos en "registro":
             # 0: Patient, 1: LensStyle, 2: LensMaterial, 3: LensColor, 4: LensOrdered,
             # 5: LensSupplied, 6: LensPrice, 7: ARCoating, 8: Mirror, 9: CoatingsPrice,
-            # 10: Tint, 11: TintOrdered, 12: TintPrice, 13: JobType, 14: ShipDate (originalmente 'YYYY-MM-DD'),
+            # 10: Tint, 11: TintOrdered, 12: TintPrice, 13: JobType, 14: ShipDate,
             # 15: TAT, 16: Redo, 17: Poder.
             patient = registro[0]
-            # Aquí en lugar de usar registro[14], se genera la fecha de ShipDate como el día actual menos 1.
-            ayer = (datetime.now() - timedelta(days=1)).date()
-            # Se utiliza la fecha "ayer" para las siguientes operaciones:
-            ship_date = ayer  # ya es de tipo date
+            hoy = datetime.now().date()  # Se toma la fecha actual
+            ship_date = hoy            # Ahora usamos la fecha de hoy en lugar de restarle un día
             tat = registro[15]
             poder = registro[17]
             aplicar_regla_tat = False
-            # Buscamos duplicado: solo se toma en cuenta si el registro existente tiene ShipDate en un rango de 0 a 14 días respecto a hoy.
+            # Buscamos duplicado: se toma en cuenta si el registro existente tiene ShipDate en un rango de 0 a 14 días respecto a hoy.
             if patient is not None and ship_date is not None:
                 query = """
                 SELECT id FROM facturacion_inks
@@ -660,10 +658,8 @@ def main_ink():
                     registro_list[9] = 0
                     registro_list[12] = 0
             registro_modificado = tuple(registro_list)
-            # Preparamos el registro final: se insertan los 18 campos originales + la columna 'semana' (al final).
-            # Se sobrescribe el valor de ShipDate (posición 14) con la fecha 'ayer' en formato YYYY-MM-DD.
-            # Por ejemplo, usando str(ayer) ya que tiene el formato "YYYY-MM-DD".
-            registro_final = registro_modificado[:14] + (str(ayer),) + registro_modificado[15:] + (semana,)
+            # Se sobrescribe el valor de ShipDate (posición 14) con la fecha de hoy
+            registro_final = registro_modificado[:14] + (str(hoy),) + registro_modificado[15:] + (semana,)
             cursor.execute(insert_query, registro_final)
             conexion.commit()
         print("Se han procesado e insertado los registros en facturacion_ink.")
