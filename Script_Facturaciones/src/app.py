@@ -2,7 +2,7 @@ import csv
 import mysql.connector
 from datetime import datetime, timedelta
 # ===============================================
-# PROCESAMIENTO DEL PRIMER ARCHIVO (facturacion_nvi) 
+# PROCESAMIENTO DEL PRIMER ARCHIVO (facturacion_nvi)
 # ===============================================
 def process_file(input_file):
     """
@@ -43,27 +43,44 @@ def extraer_total_real(archivo):
     with open(archivo, 'r', encoding='utf-8') as file:
         lines = file.readlines()  # Leer todas las líneas del archivo
         for i, line in enumerate(lines):
-            # Usamos strip() para eliminar espacios adicionales y asegurarnos de que la comparación sea correcta
-            if '** TOTAL  RX' in line.strip():  # Comparamos sin espacios
-                # Leer la siguiente línea
+            if '** TOTAL  RX' in line.strip():
                 if i + 1 < len(lines):  # Asegurarse de que hay una línea siguiente
                     siguiente_linea = lines[i + 1].strip()
-                    # Extraer el último valor de la línea
                     valores = siguiente_linea.split()
-                    if valores:  # Verificamos que la línea no esté vacía
-                        total_real = valores[-1]  # El último valor de la línea
-                break  # Salir del bucle después de encontrar el primer total
+                    if valores:
+                        total_real = valores[-1]
+                break
     return total_real
+def obtener_fecha_insercion():
+    """
+    Calcula la fecha de inserción de acuerdo a la siguiente lógica:
+      - Cuando el día actual es viernes o sábado, se establece la fecha del siguiente lunes.
+      - En cualquier otro día se toma la fecha del día siguiente.
+    """
+    hoy = datetime.now()
+    dia_semana = hoy.weekday()  # lunes=0, martes=1, ..., domingo=6
+    if dia_semana == 4:          # viernes
+        dias_a_sumar = 3       # viernes + 3 = lunes
+    elif dia_semana == 5:        # sábado
+        dias_a_sumar = 2       # sábado + 2 = lunes
+    else:
+        dias_a_sumar = 1       # cualquier otro día: el siguiente día
+    fecha_insercion = hoy + timedelta(days=dias_a_sumar)
+    return fecha_insercion
 def main_nvi():
     input_file = 'I:/VISION/A_KMNVI.txt'  # Actualiza la ruta según corresponda.
     registros = process_file(input_file)
     if not registros:
         print("No se encontraron registros para insertar en facturacion_nvi.")
         return
-    hoy = datetime.now()
-    fecha_str = hoy.strftime('%Y-%m-%d')
-    semana = hoy.isocalendar()[1]  # número de semana en formato entero
-    nuevos_registros = [(fecha_str, semana) + registro for registro in registros]
+    # Obtener la fecha de inserción según la regla definida.
+    fecha_insercion = obtener_fecha_insercion()
+    fecha_str = fecha_insercion.strftime('%Y-%m-%d')
+    semana = fecha_insercion.isocalendar()[1]  # número de semana
+    # Para cada registro obtenido se antepone la fecha y la semana.
+    # Nota: se espera que cada registro tenga 26 campos, y se inserte un valor para total_real.
+    # Inicialmente se enviará 0 para total_real en cada registro.
+    nuevos_registros = [(fecha_str, semana) + registro + (0,) for registro in registros]
     try:
         conexion = mysql.connector.connect(
             host='autorack.proxy.rlwy.net',
@@ -73,6 +90,9 @@ def main_nvi():
             database='railway'
         )
         cursor = conexion.cursor()
+        
+        # Inserción con detección de duplicados mediante ON DUPLICATE KEY UPDATE.
+        # Es indispensable que en la tabla facturacion_nvis exista un índice único sobre (fecha, semana).
         sql_insert = """
         INSERT INTO facturacion_nvis (
             fecha,
@@ -105,24 +125,57 @@ def main_nvi():
             uv_f,
             total_real
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, NULL  -- o 0
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
+        ON DUPLICATE KEY UPDATE
+            cot_lenses = cot_lenses + VALUES(cot_lenses),
+            cot_coat = cot_coat + VALUES(cot_coat),
+            surf_lenses = surf_lenses + VALUES(surf_lenses),
+            surf_cost = surf_cost + VALUES(surf_cost),
+            ar_lenses = ar_lenses + VALUES(ar_lenses),
+            ar = ar + VALUES(ar),
+            p_frm_s_lenses = p_frm_s_lenses + VALUES(p_frm_s_lenses),
+            p_frm_s = p_frm_s + VALUES(p_frm_s),
+            p_frm_f_lenses = p_frm_f_lenses + VALUES(p_frm_f_lenses),
+            p_frm_f = p_frm_f + VALUES(p_frm_f),
+            m_frm_s_lenses = m_frm_s_lenses + VALUES(m_frm_s_lenses),
+            m_frm_s = m_frm_s + VALUES(m_frm_s),
+            m_frm_f_lenses = m_frm_f_lenses + VALUES(m_frm_f_lenses),
+            m_frm_f = m_frm_f + VALUES(m_frm_f),
+            grad_s_lenses = grad_s_lenses + VALUES(grad_s_lenses),
+            grad_s = grad_s + VALUES(grad_s),
+            grad_f_lenses = grad_f_lenses + VALUES(grad_f_lenses),
+            grad_f = grad_f + VALUES(grad_f),
+            sol_s_lenses = sol_s_lenses + VALUES(sol_s_lenses),
+            sol_s = sol_s + VALUES(sol_s),
+            sol_f_lenses = sol_f_lenses + VALUES(sol_f_lenses),
+            sol_f = sol_f + VALUES(sol_f),
+            uv_s_lenses = uv_s_lenses + VALUES(uv_s_lenses),
+            uv_s = uv_s + VALUES(uv_s),
+            uv_f_lenses = uv_f_lenses + VALUES(uv_f_lenses),
+            uv_f = uv_f + VALUES(uv_f),
+            total_real = total_real + VALUES(total_real)
         """
+        
+        # Ejecutamos la inserción de todos los registros.
         cursor.executemany(sql_insert, nuevos_registros)
         conexion.commit()
-        print("Número de registros insertados en facturacion_nvis:", cursor.rowcount)
-        # Ahora extraemos el total real del segundo archivo
-        archivo_total = 'I:/VISION/net.txt'  # Cambia esta ruta al archivo correcto
+        print("Número de registros insertados/actualizados en facturacion_nvis:", cursor.rowcount)
+        
+        # Se extrae el total real del segundo archivo.
+        archivo_total = 'I:/VISION/net.txt'  # Cambia esta ruta al archivo correcto.
         total_real = extraer_total_real(archivo_total)
         if total_real is not None:
             print("Total real extraído:", total_real)
-            # Actualizar la columna total_real para el último registro insertado
-            sql_update = "UPDATE facturacion_nvis SET total_real = %s WHERE fecha = %s AND semana = %s"
+            # Actualizamos el campo total_real sumando el valor obtenido.
+            sql_update = """
+            UPDATE facturacion_nvis
+            SET total_real = COALESCE(total_real, 0) + %s
+            WHERE fecha = %s AND semana = %s
+            """
             cursor.execute(sql_update, (total_real, fecha_str, semana))
             conexion.commit()
-            print("Total real actualizado en facturacion_nvis.")
+            print("Total real actualizado (sumado) en facturacion_nvis.")
         else:
             print("No se encontró el total real en el archivo.")
     except mysql.connector.Error as err:
@@ -159,18 +212,17 @@ def sumar_precio_tallado(input_file):
       12 -> STT8X35
       16 -> SV
       20 -> SV POLAR POLY TTL
-    Cada valor se multiplica por 3 (1*3 = 3, 2*3 = 6, 0*3 = 0) y se suman.
+    Cada valor se multiplica por 3 y se suma.
     """
     suma_dolares = 0.0
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # Omitir la cabecera
+        next(reader, None)  # Omitir cabecera
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
                 continue
             datos = row[1:25]
-            # Índices de las columnas relevantes
             indices = [0, 4, 8, 12, 16, 20]
             for idx in indices:
                 try:
@@ -181,19 +233,16 @@ def sumar_precio_tallado(input_file):
     return suma_dolares
 def contar_trabajos_hc(input_file):
     """
-    Recorre el archivo, omite la cabecera y suma el "trabajos_hc" de cada fila.
+    Recorre el archivo, omite la cabecera y suma los "trabajos hc" de cada fila.
     Se toman los valores de las columnas:
       ST35 W COT, ST28 W COT, 7X28 W COT, 8X35 W COT, SV W COT y SV POLAR W COT.
-    Dado que en cada una esos valores pueden ser 0, 1 o 2, se contará 1 trabajo si el valor es 1 o 2,
-    y 0 si es 0.
-    La función retorna la suma total a lo largo de todas las filas.
+    Se cuenta 1 trabajo si el valor es 1 o 2.
     """
     total_trabajos_hc = 0
-    # Índices de las columnas relevantes en row[1:25]
     indices = [3, 7, 11, 15, 19, 23]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # Omitir la cabecera
+        next(reader, None)
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
@@ -210,23 +259,20 @@ def contar_trabajos_hc(input_file):
 def sumar_precio_hc(input_file):
     """
     Recorre el archivo, omite la cabecera y suma el "precio hc" de cada fila.
-    Para cada fila se toman los valores de las columnas:
-      ST35 W COT, ST28 W COT, 7X28 W COT, 8X35 W COT, SV W COT y SV POLAR W COT.
-    Se asume que en la porción row[1:25] estos valores se encuentran en los índices:
-      3  -> ST35 W COT
-      7  -> ST28 W COT
-      11 -> 7X28 W COT
-      15 -> 8X35 W COT
-      19 -> SV W COT
-      23 -> SV POLAR W COT
-    Si el valor es 1 se suma 0.625, si es 2 se suma 1.25, y si es 0 se suma 0.
-    La función retorna la suma total de "precio hc".
+    Los valores de las columnas relevantes se encuentran en índices de row[1:25]:
+      3 -> ST35 W COT
+      7 -> ST28 W COT
+      11-> 7X28 W COT
+      15-> 8X35 W COT
+      19-> SV W COT
+      23-> SV POLAR W COT
+    Se suma 0.625 si el valor es 1 y 1.25 si es 2.
     """
     suma_hc = 0.0
     indices = [3, 7, 11, 15, 19, 23]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # Omitir la cabecera
+        next(reader, None)
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
@@ -241,26 +287,18 @@ def sumar_precio_hc(input_file):
                     suma_hc += 0.625
                 elif valor == 2:
                     suma_hc += 1.25
-                # Si es 0 o cualquier otro valor, se suma 0
     return suma_hc
 def contar_trabajos_ar_standard(input_file):
     """
-    Recorre el archivo, omite la cabecera y cuenta los "trabajos ar standard" por fila.
-    Se inspeccionan las siguientes columnas de la porción row[1:25]:
-      índice 1  -> ST35 W STAND AR  
-      índice 5  -> ST28 W STAND AR  
-      índice 9  -> 7X28 STAND AR  
-      índice 13 -> 8X35 W STAND AR  
-      índice 17 -> SV W STAND AR  
-      índice 21 -> SV POLAR W STAND AR  
-    Si el valor leído (convertido a entero) es 1 o 2 se contará como 1 trabajo.
-    La función retorna la suma total de estos trabajos para todas las filas.
+    Cuenta los "trabajos ar standard" en cada fila, considerando los valores en:
+      índices 1, 5, 9, 13, 17, 21 de row[1:25].
+    Si el valor (convertido a entero) es 1 o 2 se cuenta el trabajo.
     """
     total_trabajos_ar_std = 0
     indices = [1, 5, 9, 13, 17, 21]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # omite la cabecera
+        next(reader, None)
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
@@ -276,25 +314,15 @@ def contar_trabajos_ar_standard(input_file):
     return total_trabajos_ar_std
 def sumar_precio_ar_standard(input_file):
     """
-    Recorre el archivo, omite la cabecera y calcula el "precio ar standard" para cada fila.
-    Se toman los valores de las columnas:
-      índice 1 -> ST35 W STAND AR  
-      índice 5 -> ST28 W STAND AR  
-      índice 9 -> 7X28 STAND AR  
-      índice 13-> 8X35 W STAND AR  
-      índice 17-> SV W STAND AR  
-      índice 21-> SV POLAR W STAND AR  
-    La regla es:
-      Si el valor es 0 → aporta 0
-      Si el valor es 1 → aporta 1.875
-      Si el valor es 2 → aporta 3.75
-    La función devuelve la suma total para todas las filas.
+    Calcula el "precio ar standard" para cada fila, considerando los valores en:
+      índices 1, 5, 9, 13, 17, 21 de row[1:25].
+    Si el valor es 1 aporta 1.875, si es 2 aporta 3.75.
     """
     suma_ar_std = 0.0
     indices = [1, 5, 9, 13, 17, 21]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # omite la cabecera
+        next(reader, None)
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
@@ -309,26 +337,17 @@ def sumar_precio_ar_standard(input_file):
                     suma_ar_std += 1.875
                 elif valor == 2:
                     suma_ar_std += 3.75
-                # Si es 0, suma 0
     return suma_ar_std
 def contar_trabajos_ar_premium(input_file):
     """
-    Recorre el archivo, omite la cabecera y cuenta los "trabajos ar premium" en cada fila.
-    Se toman los valores de las columnas correspondientes (dentro de row[1:25]):
-      índice 2  -> ST35 W PREM AR  
-      índice 6  -> ST28 W PREM AR  
-      índice 10 -> 7X28 W PREM AR  
-      índice 14 -> 8X35 W PREM AR  
-      índice 18 -> SV W PREM AR  
-      índice 22 -> SV POLAR W PREM AR  
-    Si el valor (convertido a entero) es 1 o 2 se cuenta como 1 registro.
-    La función retorna la suma total a través de todas las filas.
+    Cuenta los "trabajos ar premium" en cada fila, considerando los índices 2, 6, 10, 14, 18, 22 de row[1:25].
+    Se cuenta 1 trabajo si el valor, convertido a entero, es 1 o 2.
     """
     total_trabajos_ar_prem = 0
     indices = [2, 6, 10, 14, 18, 22]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # omite la cabecera
+        next(reader, None)
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
@@ -344,25 +363,15 @@ def contar_trabajos_ar_premium(input_file):
     return total_trabajos_ar_prem
 def sumar_precio_ar_premium(input_file):
     """
-    Recorre el archivo, omite la cabecera y suma el "precio ar premium" para cada fila.
-    Se toman los valores de las columnas:
-      índice 2  -> ST35 W PREM AR  
-      índice 6  -> ST28 W PREM AR  
-      índice 10 -> 7X28 W PREM AR  
-      índice 14 -> 8X35 W PREM AR  
-      índice 18 -> SV W PREM AR  
-      índice 22 -> SV POLAR W PREM AR  
-    La regla de conversión es:
-      Si el valor es 0 → aporta 0  
-      Si el valor es 1 → aporta 2.125  
-      Si el valor es 2 → aporta 4.25  
-    La función retorna la suma total a lo largo de todas las filas.
+    Suma el "precio ar premium" de cada fila, basado en los valores en:
+      índices 2, 6, 10, 14, 18, 22 de row[1:25].
+    Si el valor es 1 aporta 2.125 y si es 2 aporta 4.25.
     """
     suma_ar_prem = 0.0
     indices = [2, 6, 10, 14, 18, 22]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # omite la cabecera
+        next(reader, None)
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
@@ -377,28 +386,39 @@ def sumar_precio_ar_premium(input_file):
                     suma_ar_prem += 2.125
                 elif valor == 2:
                     suma_ar_prem += 4.25
-                # Si es 0, aporta 0 (no se suma nada)
     return suma_ar_prem
 def sumar_total_precio(input_file):
     """
-    Recorre el archivo, omite la cabecera y suma los valores de la última columna,
-    la cual se asume que es "$$ inv". Se convierten a float para realizar la suma.
-    Retorna la suma total.
+    Suma los valores de la última columna (se asume que es "$$ inv") de cada fila.
     """
     suma_total = 0.0
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)  # Omitir la cabecera
+        next(reader, None)
         for row in reader:
             if not row:
                 continue
             try:
-                # Suponemos que el valor "$$ inv" es el último elemento de la fila
                 valor = float(row[-1].strip())
             except Exception:
                 valor = 0.0
             suma_total += valor
     return suma_total
+def obtener_fecha_insercion():
+    """
+    Calcula la fecha de inserción de acuerdo a la siguiente lógica:
+      - Si hoy es viernes o sábado, se establece la fecha del siguiente lunes.
+      - En cualquier otro día se utiliza la fecha del día siguiente.
+    """
+    hoy = datetime.now()
+    dia_semana = hoy.weekday()  # lunes=0, martes=1, ... domingo=6
+    if dia_semana == 4:      # viernes
+        dias_a_sumar = 3
+    elif dia_semana == 5:    # sábado
+        dias_a_sumar = 2
+    else:
+        dias_a_sumar = 1
+    return hoy + timedelta(days=dias_a_sumar)
 def main_hoya():
     input_file = "I:/VISION/A_HOYTT.txt"  # Ruta interna del archivo.
     total_trabajos = contar_trabajos_tallados(input_file)
@@ -410,14 +430,24 @@ def main_hoya():
     trabajos_ar_premium = contar_trabajos_ar_premium(input_file)
     precio_ar_premium = sumar_precio_ar_premium(input_file)
     total_precio = sumar_total_precio(input_file)
-    fecha_actual = datetime.now().strftime('%Y-%m-%d')
-    # Se obtiene la semana actual; isocalendar() retorna (año, semana, día)
-    semana_actual = datetime.now().isocalendar()[1]
-    # Se forma el registro con todos los valores:
-    # fecha, semana, trabajos_tallados, precio_tallado, trabajos_hc, precio_hc,
-    # trabajos_ar_standard, precio_ar_standard, trabajos_ar_premium, precio_ar_premium, total_precio
-    registro = (fecha_actual, semana_actual, total_trabajos, precio_tallado, trabajos_hc, precio_hc,
-                trabajos_ar_standard, precio_ar_standard, trabajos_ar_premium, precio_ar_premium, total_precio)
+    # Calcular la fecha de inserción utilizando la lógica establecida.
+    fecha_insercion = obtener_fecha_insercion()
+    fecha_str = fecha_insercion.strftime('%Y-%m-%d')
+    semana_actual = fecha_insercion.isocalendar()[1]
+    # Se arma el registro a insertar.
+    registro = (
+        fecha_str, 
+        semana_actual, 
+        total_trabajos, 
+        precio_tallado, 
+        trabajos_hc, 
+        precio_hc,
+        trabajos_ar_standard, 
+        precio_ar_standard, 
+        trabajos_ar_premium, 
+        precio_ar_premium, 
+        total_precio
+    )
     try:
         conexion = mysql.connector.connect(
             host='autorack.proxy.rlwy.net',
@@ -427,6 +457,8 @@ def main_hoya():
             database='railway'
         )
         cursor = conexion.cursor()
+        # Se usa INSERT ... ON DUPLICATE KEY UPDATE para consolidar registros con la misma fecha y semana.
+        # Es indispensable que la tabla facturacion_hoyas tenga un índice único sobre (fecha, semana).
         sql_insert = """
         INSERT INTO facturacion_hoyas (
             fecha, 
@@ -440,11 +472,23 @@ def main_hoya():
             trabajos_ar_premium, 
             precio_ar_premium,
             total_precio
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON DUPLICATE KEY UPDATE
+            trabajos_tallados = trabajos_tallados + VALUES(trabajos_tallados),
+            precio_tallado = precio_tallado + VALUES(precio_tallado),
+            trabajos_hc = trabajos_hc + VALUES(trabajos_hc),
+            precio_hc = precio_hc + VALUES(precio_hc),
+            trabajos_ar_standard = trabajos_ar_standard + VALUES(trabajos_ar_standard),
+            precio_ar_standard = precio_ar_standard + VALUES(precio_ar_standard),
+            trabajos_ar_premium = trabajos_ar_premium + VALUES(trabajos_ar_premium),
+            precio_ar_premium = precio_ar_premium + VALUES(precio_ar_premium),
+            total_precio = total_precio + VALUES(total_precio)
         """
         cursor.execute(sql_insert, registro)
         conexion.commit()
-        print("Registro insertado correctamente:")
+        print("Registro insertado/actualizado correctamente en facturacion_hoyas:")
         print("  trabajos_tallados    =", total_trabajos)
         print("  precio_tallado       =", precio_tallado)
         print("  trabajos_hc          =", trabajos_hc)
@@ -455,6 +499,7 @@ def main_hoya():
         print("  precio_ar_premium    =", precio_ar_premium)
         print("  total_precio         =", total_precio)
         print("  semana               =", semana_actual)
+        print("  fecha insertada      =", fecha_str)
     except mysql.connector.Error as err:
         print("Error al insertar en facturacion_hoyas:", err)
     finally:
@@ -572,6 +617,22 @@ def process_third_file(input_file):
             except Exception as e:
                 print("Error procesando la fila:", row_adj, e)
     return registros
+def obtener_fecha_insercion():
+    """
+    Calcula la fecha de inserción para el campo ShipDate de acuerdo a la siguiente lógica:
+      - Si hoy es viernes o sábado, se utiliza la fecha del siguiente lunes.
+      - Para cualquier otro día se utiliza la fecha del día siguiente.
+    """
+    hoy = datetime.now()
+    dia_semana = hoy.weekday()  # lunes=0, martes=1, ... domingo=6
+    if dia_semana == 4:       # viernes
+        dias_a_sumar = 3
+    elif dia_semana == 5:     # sábado
+        dias_a_sumar = 2
+    else:
+        dias_a_sumar = 1
+    fecha_insercion = hoy + timedelta(days=dias_a_sumar)
+    return fecha_insercion
 def main_ink():
     input_file = 'I:/VISION/A_INKREC.txt'  # Actualiza la ruta al archivo correspondiente.
     registros = process_third_file(input_file)
@@ -587,8 +648,11 @@ def main_ink():
             database='railway'
         )
         cursor = conexion.cursor()
-        # Obtenemos el número de semana a partir del día actual
-        semana = datetime.now().isocalendar()[1]
+        # Obtenemos el número de semana a partir de la fecha de inserción
+        fecha_insercion = obtener_fecha_insercion()
+        semana = fecha_insercion.isocalendar()[1]
+        # Fecha que se insertará (como cadena en formato 'YYYY-MM-DD')
+        fecha_str = fecha_insercion.strftime('%Y-%m-%d')
         insert_query = """
         INSERT INTO facturacion_inks (
             Patient,
@@ -621,13 +685,11 @@ def main_ink():
             # 10: Tint, 11: TintOrdered, 12: TintPrice, 13: JobType, 14: ShipDate,
             # 15: TAT, 16: Redo, 17: Poder.
             patient = registro[0]
-            hoy = datetime.now().date()  # Se toma la fecha actual
-            ship_date = hoy            # Ahora usamos la fecha de hoy en lugar de restarle un día
             tat = registro[15]
             poder = registro[17]
             aplicar_regla_tat = False
-            # Buscamos duplicado: se toma en cuenta si el registro existente tiene ShipDate en un rango de 0 a 14 días respecto a hoy.
-            if patient is not None and ship_date is not None:
+            # Buscamos duplicado: se toma en cuenta si el registro existente tiene ShipDate en un rango de 0 a 14 días respecto a la fecha de inserción.
+            if patient is not None:
                 query = """
                 SELECT id FROM facturacion_inks
                 WHERE Patient = %s
@@ -635,8 +697,7 @@ def main_ink():
                   AND DATEDIFF(%s, ShipDate) <= 14
                 LIMIT 1
                 """
-                hoy_date = datetime.now().date()
-                cursor.execute(query, (patient, hoy_date, hoy_date))
+                cursor.execute(query, (patient, fecha_str, fecha_str))
                 duplicado = cursor.fetchone()
                 if duplicado:
                     aplicar_regla_tat = True
@@ -658,8 +719,8 @@ def main_ink():
                     registro_list[9] = 0
                     registro_list[12] = 0
             registro_modificado = tuple(registro_list)
-            # Se sobrescribe el valor de ShipDate (posición 14) con la fecha de hoy
-            registro_final = registro_modificado[:14] + (str(hoy),) + registro_modificado[15:] + (semana,)
+            # Se sobrescribe el valor de ShipDate (posición 14) con la fecha calculada
+            registro_final = registro_modificado[:14] + (fecha_str,) + registro_modificado[15:] + (semana,)
             cursor.execute(insert_query, registro_final)
             conexion.commit()
         print("Se han procesado e insertado los registros en facturacion_ink.")

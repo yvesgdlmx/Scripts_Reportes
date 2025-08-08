@@ -23,7 +23,7 @@ def parse_date(date_str):
         try:
             date = datetime.strptime(date_str, fmt)
             if date.year < 100:
-                date = date.replace(year=date.year + 2000)
+                date = date.replace(year = date.year + 2000)
             return date.strftime('%Y-%m-%d')
         except ValueError:
             continue
@@ -41,6 +41,9 @@ def process_stations_file(filename):
         "Q-JAI KUDO JOBS", "OPTIMEX", "INK LIFT OPTICS", "166 POLY AR F", "167 CR AR F", "168 CR 75",
     }
     station_counts = {}
+    # Se crearán dos diccionarios para acumular los valores NO surtidos de ARSemi y SinAR Semi (solo para registros con tipo S)
+    sums_ar_semi = {}
+    sums_sin_ar_semi = {}
     print(f"Procesando archivo de estaciones: {filename}")
     try:
         with open(filename, 'r') as file:
@@ -52,13 +55,27 @@ def process_stations_file(filename):
                     tipo = row[2].strip()
                     estacion = row[12].strip()
                     fecha_parsed = parse_date(fecha)
-                    # Verificar si la estación está en la lista de permitidas
+                    # Verificamos si la estación está en la lista de permitidas y si el registro es de tipo F o S
                     if fecha_parsed and tipo in ['F', 'S'] and estacion in estaciones_permitidas:
                         key = (fecha_parsed, tipo)
                         station_counts[key] = station_counts.get(key, 0) + 1
+                        # Para registros de tipo S, acumular los valores de NO surtido correspondientes a ARSemi y SinAR Semi
+                        if tipo == 'S':
+                            try:
+                                # Se asume el siguiente orden en las columnas:
+                                # 7: NVI ARSemi
+                                # 10: NVI SinAR Semi
+                                ar_semi_val = int(float(row[7].strip()))
+                                sin_ar_semi_val = int(float(row[10].strip()))
+                            except Exception as ex:
+                                print(f"Error parseando valores ARSemi en fila: {row} - {ex}")
+                                ar_semi_val = 0
+                                sin_ar_semi_val = 0
+                            sums_ar_semi[fecha_parsed] = sums_ar_semi.get(fecha_parsed, 0) + ar_semi_val
+                            sums_sin_ar_semi[fecha_parsed] = sums_sin_ar_semi.get(fecha_parsed, 0) + sin_ar_semi_val
     except Exception as e:
         print(f"Error procesando archivo de estaciones: {str(e)}")
-    return station_counts
+    return station_counts, sums_ar_semi, sums_sin_ar_semi
 def process_summary_file(filename, station_counts):
     summary_data = []
     print(f"Procesando archivo de resumen: {filename}")
@@ -110,24 +127,19 @@ try:
     if connection.is_connected():
         print("Conexión establecida exitosamente.")
     cursor = connection.cursor()
-    
+    # Procesar archivo de estaciones (A_INARFD.txt)
     stations_file = 'I:/VISION/A_INARFD.txt'
-    station_counts = process_stations_file(stations_file)
+    station_counts, sums_ar_semi, sums_sin_ar_semi = process_stations_file(stations_file)
+    # Procesar archivo de resumen (A_INARF1.txt)
     summary_file = 'I:/VISION/A_INARF1.txt'
     summary_data = process_summary_file(summary_file, station_counts)
-    
     now = datetime.now()
     current_date = now.strftime('%Y-%m-%d')
-    
     # Determinar el turno según la hora actual
     diurno_inicio = datetime.strptime("06:30", "%H:%M").time()
     diurno_fin = datetime.strptime("22:00", "%H:%M").time()
     current_time = now.time()
-    if diurno_inicio <= current_time < diurno_fin:
-        turno = "diurno"
-    else:
-        turno = "nocturno"
-    
+    turno = "diurno" if diurno_inicio <= current_time < diurno_fin else "nocturno"
     # Condicionales para evitar inserciones en ciertos rangos de minutos
     skip_insertion = False
     if turno == "diurno" and 0 <= now.minute <= 10:
@@ -136,22 +148,16 @@ try:
     elif turno == "nocturno" and 30 <= now.minute <= 40:
         print("Turno nocturno: No se insertarán datos si se ejecuta entre los minutos 30 y 40.")
         skip_insertion = True
-    
-    # Definir la hora de inserción según el turno:
-    if turno == "diurno":
-        hora_insercion = get_rounded_time(now)
-    else:
-        # Durante el nocturno se inserta la hora cerrada (minutos a 00)
-        hora_insercion = now.strftime("%H:00:00")
-    
+    # Definir hora de inserción según el turno
+    hora_insercion = get_rounded_time(now) if turno == "diurno" else now.strftime("%H:00:00")
     if not skip_insertion:
         sql_insert_summary = """
         INSERT INTO resumen_nvis
         (fecha, nvi_en_proceso, nvi_fs, nvi_total_term, nvi_total_ster, 
          no_surtido_term, no_surtido_ster, surtido_term, surtido_ster,
          nvi_con_ar, nvi_ar_term, nvi_ar_semi, nvi_sin_ar, nvi_sin_ar_term, nvi_sin_ar_semi,
-         fecha_insercion, hora_insercion)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+         no_surtido_ar_semi, no_surtido_sin_ar_semi, fecha_insercion, hora_insercion)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             nvi_en_proceso = VALUES(nvi_en_proceso),
             nvi_fs = VALUES(nvi_fs),
@@ -167,6 +173,8 @@ try:
             nvi_sin_ar = VALUES(nvi_sin_ar),
             nvi_sin_ar_term = VALUES(nvi_sin_ar_term),
             nvi_sin_ar_semi = VALUES(nvi_sin_ar_semi),
+            no_surtido_ar_semi = VALUES(no_surtido_ar_semi),
+            no_surtido_sin_ar_semi = VALUES(no_surtido_sin_ar_semi),
             fecha_insercion = VALUES(fecha_insercion),
             hora_insercion = VALUES(hora_insercion)
         """
@@ -174,7 +182,9 @@ try:
             (item['fecha'], item['nvi_en_proceso'], item['nvi_fs'], item['nvi_total_term'], item['nvi_total_ster'], 
              item['no_surtido_term'], item['no_surtido_ster'], item['surtido_term'], item['surtido_ster'],
              item['nvi_con_ar'], item['nvi_ar_term'], item['nvi_ar_semi'], item['nvi_sin_ar'], item['nvi_sin_ar_term'], 
-             item['nvi_sin_ar_semi'], current_date, hora_insercion)
+             item['nvi_sin_ar_semi'], 
+             sums_ar_semi.get(item['fecha'], 0), sums_sin_ar_semi.get(item['fecha'], 0),
+             current_date, hora_insercion)
             for item in summary_data
         ]
         if data_to_insert_summary:

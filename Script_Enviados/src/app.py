@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 import mysql.connector
 
 # Configuración de la conexión a la base de datos
@@ -36,14 +36,31 @@ def get_record_hour():
 # Función para determinar si el momento actual es apto para insertar datos
 def is_valid_time_to_insert():
     now = datetime.now()
-    # Regla para el rango nocturno: 22:00 a 06:00, se omite inserción si minutos están entre 30 y 39
-    if now.hour >= 22 or now.hour < 6:
+    
+    # Definir el inicio del turno nocturno: desde ayer a las 22:00 si estamos antes de las 06:30 hoy,
+    # o desde hoy a las 22:00 si ya es después de las 06:30.
+    if now.hour < 6 or (now.hour == 6 and now.minute < 30):
+        # Es antes de las 06:30, por lo que consideramos que el turno nocturno empezó ayer a las 22:00
+        turno_nocturno_inicio = (now - timedelta(days=1)).replace(hour=22, minute=0, second=0, microsecond=0)
+        turno_nocturno_fin = now.replace(hour=6, minute=29, second=59, microsecond=0)
+    else:
+        # Si es después de las 06:30, evaluar en dos casos:
+        #   a) Si es turno diurno: desde las 06:30 hasta antes de las 22:00.
+        #   b) Si es turno nocturno: a partir de las 22:00 de hoy.
+        turno_nocturno_inicio = now.replace(hour=22, minute=0, second=0, microsecond=0)
+        turno_nocturno_fin = (now + timedelta(days=1)).replace(hour=6, minute=29, second=59, microsecond=0)
+    
+    # Si el momento actual cae en el turno nocturno, se aplica la restricción de minutos 30 a 39
+    if turno_nocturno_inicio <= now <= turno_nocturno_fin:
         if 30 <= now.minute < 40:
             return False
-    # Regla para el rango diurno: de 06:30 a 21:59, se omite inserción si minutos están entre 01 y 10
     else:
-        # Para incluir correctamente el rango a partir de las 06:30
-        if (now.hour > 6 or (now.hour == 6 and now.minute >= 30)) and now.hour < 22:
+        # Si no está en turno nocturno, asumimos que es turno diurno:
+        # Para el diurno, definimos que es a partir de las 06:30 y hasta antes de las 22:00
+        # Restricción: omitir inserciones si los minutos están entre 01 y 10.
+        inicio_diurno = now.replace(hour=6, minute=30, second=0, microsecond=0)
+        fin_diurno = now.replace(hour=21, minute=59, second=59, microsecond=0)
+        if inicio_diurno <= now <= fin_diurno:
             if 1 <= now.minute < 11:
                 return False
     return True
