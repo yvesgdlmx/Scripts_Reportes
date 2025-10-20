@@ -1,49 +1,39 @@
 import csv
 import mysql.connector
 from datetime import datetime, timedelta
-# Configuración: cuando el valor es ambiguo, se utilizará este orden.
-# 'mmddyy' significa que se interpretará el primer valor como mes y el segundo como día.
-DEFAULT_FORMAT_AMBIGUOUS = 'mmddyy'
 def robust_parse_date(date_str, filtro_diferencia_dias=None):
     """
-    Intenta parsear la fecha usando los siguientes formatos:
-      - "%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y"
-    Si se pasa el parámetro filtro_diferencia_dias (por ejemplo, 4) se devolverá el candidato cuya
-    diferencia con la fecha actual sea la indicada.
-    En caso ambiguo se usará la variable DEFAULT_FORMAT_AMBIGUOUS para decidir.
+    Intenta parsear la fecha usando el siguiente orden de formatos, que se asume serán:
+      - "%m/%d/%Y" y "%m/%d/%y"
+    Es decir, se espera que la fecha venga en formato mm/dd/yy (o con año completo).
+    
+    Si se usa el formato de dos dígitos (mm/dd/yy) y el año es menor a 100,
+    se asume que pertenece al siglo 2000.
+    
+    Si falla en parsear la fecha, se lanza ValueError.
     """
     date_str = date_str.strip()
-    posibles_formatos = ["%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y"]
-    candidatos = []
-    for fmt in posibles_formatos:
+    if not date_str:
+        raise ValueError("Fecha vacía")
+        
+    formatos = ["%m/%d/%Y", "%m/%d/%y"]
+    d = None
+    for fmt in formatos:
         try:
             d = datetime.strptime(date_str, fmt).date()
-            # Si el formato tiene año de 2 dígitos y es menor a 100, asumimos el siglo 2000.
-            if fmt in ("%m/%d/%y", "%d/%m/%y") and d.year < 100:
+            # Si se usó el formato de dos dígitos y el año es menor que 100, asumimos el siglo 2000.
+            if fmt == "%m/%d/%y" and d.year < 100:
                 d = d.replace(year=d.year + 2000)
-            candidatos.append((fmt, d))
+            break
         except ValueError:
             continue
-    if not candidatos:
+    if d is None:
         raise ValueError(f"No se pudo parsear la fecha: {date_str}")
-    # Si se requiere filtrar por diferencia (por ejemplo, para enter_date queremos 4 días de antigüedad).
     if filtro_diferencia_dias is not None:
         dia_actual = datetime.now().date()
-        candidatos_validos = [d for fmt, d in candidatos if (dia_actual - d).days == filtro_diferencia_dias]
-        if candidatos_validos:
-            return candidatos_validos[0]
-    # En caso ambiguo, recurrir a la configuración por defecto:
-    # Para 'mmddyy' se elige el formato que empieza con "%m"
-    if DEFAULT_FORMAT_AMBIGUOUS == 'mmddyy':
-        for fmt, d in candidatos:
-            if fmt.startswith("%m"):
-                return d
-    elif DEFAULT_FORMAT_AMBIGUOUS == 'ddmmyy':
-        for fmt, d in candidatos:
-            if fmt.startswith("%d"):
-                return d
-    # Si no coincide con la configuración o no es ambiguo, se devuelve el primer candidato.
-    return candidatos[0][1]
+        if (dia_actual - d).days != filtro_diferencia_dias:
+            raise ValueError(f"La diferencia de días no es de {filtro_diferencia_dias}")
+    return d
 def parse_time_str(time_str):
     """
     Parsea una cadena de tiempo y devuelve un objeto time.
@@ -71,29 +61,31 @@ def process_file(input_file):
         now = datetime.now()
         dia_actual = now.date()
         for row in reader:
+            # Se espera que la fila tenga 11 columnas.
             if len(row) < 11:
                 print(f"Fila incompleta, se omite: {row}")
                 continue
             try:
-                # Se interpreta el campo enter_date con filtro de 4 días.
-                enter_date_obj = robust_parse_date(row[0], filtro_diferencia_dias=4)
+                # Parseamos enter_date usando únicamente el formato mm/dd/yy (o mm/dd/YYYY).
+                enter_date_obj = robust_parse_date(row[0])
                 enter_date = enter_date_obj.strftime('%Y-%m-%d')
-                # Si la diferencia no es de 4 días, se omite el registro.
-                if (dia_actual - enter_date_obj).days != 4:
-                    continue
+                
                 acct = row[1].strip()
                 tray_number = row[2].strip()
                 ink_tray = row[3].strip()
                 current_station = row[4].strip()
                 
-                # Para current_stn_date se usa robust_parse_date sin filtro (se asume por defecto).
+                # Parseamos current_stn_date con el mismo formato.
                 current_stn_date_obj = robust_parse_date(row[5])
                 current_stn_date = current_stn_date_obj.strftime('%Y-%m-%d')
+                
                 division = row[6].strip()
                 days_in_process = int(float(row[7].strip()))
                 current_stn_time = parse_time_str(row[8].strip())
                 coat = row[9].strip()
                 f_s = row[10].strip()
+                
+                # Se calcula el tiempo transcurrido usando current_stn_date y current_stn_time.
                 fecha_hora_origen = datetime.combine(current_stn_date_obj, current_stn_time)
                 diferencia = now - fecha_hora_origen
                 transcurrido = format_timedelta(diferencia)
@@ -135,7 +127,7 @@ def main():
         sql_truncate = "TRUNCATE TABLE trabajos_sin_movimientos"
         cursor.execute(sql_truncate)
         print("Tabla trabajos_sin_movimientos truncada exitosamente.")
-        input_file = 'I:/VISION/a_IP.txt'
+        input_file = 'I:/VISION/a_IPEYE.txt'
         registros = process_file(input_file)
         sql_insert = """
         INSERT INTO trabajos_sin_movimientos (

@@ -233,43 +233,73 @@ def sumar_precio_tallado(input_file):
     return suma_dolares
 def contar_trabajos_hc(input_file):
     """
-    Recorre el archivo, omite la cabecera y suma los "trabajos hc" de cada fila.
-    Se toman los valores de las columnas:
-      ST35 W COT, ST28 W COT, 7X28 W COT, 8X35 W COT, SV W COT y SV POLAR W COT.
-    Se cuenta 1 trabajo si el valor es 1 o 2.
+    Recorre el archivo, omite la cabecera y calcula el número real de trabajos HC.
+    Para cada uno de los 6 grupos (ST35, ST28, 7X28, 8X35, SV, SV POLAR) se:
+      - Lee el valor de la columna HC (por ejemplo, ST35 W COT).
+      - Lee las dos columnas de AR (por ejemplo, ST35 W con AR Estándar y AR Premium).
+      - Se cuenta 1 trabajo si el valor de HC es 1 o 2, pero se le restan 1 unidad por cada
+        columna AR que tenga valor 1 o 2, ya que ese HC ya fue cobrado en AR.
     """
     total_trabajos_hc = 0
-    indices = [3, 7, 11, 15, 19, 23]
+    # Se definen los grupos: (índice AR Estándar, índice AR Premium, índice HC)
+    grupos = [
+        (1, 2, 3),   # Grupo para ST35
+        (5, 6, 7),   # Grupo para ST28
+        (9, 10, 11),  # Grupo para 7X28
+        (13, 14, 15), # Grupo para 8X35
+        (17, 18, 19), # Grupo para SV
+        (21, 22, 23)  # Grupo para SV POLAR
+    ]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
-        next(reader, None)
+        next(reader, None)  # omitir cabecera
         for row in reader:
             if len(row) < 25:
                 print("Fila incompleta, se omite:", row)
                 continue
             datos = row[1:25]
-            for idx in indices:
+            for ar_std_idx, ar_prem_idx, hc_idx in grupos:
                 try:
-                    valor = int(datos[idx].strip())
-                except Exception:
-                    valor = 0
-                if valor in (1, 2):
-                    total_trabajos_hc += 1
+                    valor_hc = int(datos[hc_idx].strip())
+                except:
+                    valor_hc = 0
+                try:
+                    valor_ar_std = int(datos[ar_std_idx].strip())
+                except:
+                    valor_ar_std = 0
+                try:
+                    valor_ar_prem = int(datos[ar_prem_idx].strip())
+                except:
+                    valor_ar_prem = 0
+                # Para el conteo, consideramos 1 trabajo si HC es 1 o 2.
+                base_hc = 1 if valor_hc in (1, 2) else 0
+                # Se cuentan 1 trabajo en AR por cada columna con valor 1 o 2
+                ar_std = 1 if valor_ar_std in (1, 2) else 0
+                ar_prem = 1 if valor_ar_prem in (1, 2) else 0
+                # Se resta el aporte de AR al trabajo HC
+                trabajos_reales = base_hc - (ar_std + ar_prem)
+                if trabajos_reales < 0:
+                    trabajos_reales = 0
+                total_trabajos_hc += trabajos_reales
     return total_trabajos_hc
 def sumar_precio_hc(input_file):
     """
-    Recorre el archivo, omite la cabecera y suma el "precio hc" de cada fila.
-    Los valores de las columnas relevantes se encuentran en índices de row[1:25]:
-      3 -> ST35 W COT
-      7 -> ST28 W COT
-      11-> 7X28 W COT
-      15-> 8X35 W COT
-      19-> SV W COT
-      23-> SV POLAR W COT
-    Se suma 0.625 si el valor es 1 y 1.25 si es 2.
+    Recorre el archivo, omite la cabecera y calcula el precio real de HC por fila.
+    Para cada grupo (ST35, ST28, 7X28, 8X35, SV, SV POLAR) se:
+      - Usa el valor de la columna HC para asignar un precio base (0.625 si es 1, 1.25 si es 2).
+      - Resta el precio correspondiente a las columnas AR (0.625 si el valor es 1 y 1.25 si es 2),
+        ya que en AR ya se incluye el cobro de HC.
+      - Se acumula el precio real resultante, asegurando que no sea negativo.
     """
     suma_hc = 0.0
-    indices = [3, 7, 11, 15, 19, 23]
+    grupos = [
+        (1, 2, 3),   # Grupo para ST35
+        (5, 6, 7),   # Grupo para ST28
+        (9, 10, 11),  # Grupo para 7X28
+        (13, 14, 15), # Grupo para 8X35
+        (17, 18, 19), # Grupo para SV
+        (21, 22, 23)  # Grupo para SV POLAR
+    ]
     with open(input_file, 'r', encoding='utf-8', newline='') as file:
         reader = csv.reader(file, delimiter='\t')
         next(reader, None)
@@ -278,15 +308,34 @@ def sumar_precio_hc(input_file):
                 print("Fila incompleta, se omite:", row)
                 continue
             datos = row[1:25]
-            for idx in indices:
+            for ar_std_idx, ar_prem_idx, hc_idx in grupos:
                 try:
-                    valor = int(datos[idx].strip())
-                except Exception:
-                    valor = 0
-                if valor == 1:
-                    suma_hc += 0.625
-                elif valor == 2:
-                    suma_hc += 1.25
+                    valor_hc = int(datos[hc_idx].strip())
+                except:
+                    valor_hc = 0
+                try:
+                    valor_ar_std = int(datos[ar_std_idx].strip())
+                except:
+                    valor_ar_std = 0
+                try:
+                    valor_ar_prem = int(datos[ar_prem_idx].strip())
+                except:
+                    valor_ar_prem = 0
+                # Asignar el precio base para HC según su valor
+                if valor_hc == 1:
+                    precio_hc_base = 0.625
+                elif valor_hc == 2:
+                    precio_hc_base = 1.25
+                else:
+                    precio_hc_base = 0.0
+                # Precio que ya se cobra en AR (para cada columna)
+                precio_ar_std = 0.625 if valor_ar_std == 1 else 1.25 if valor_ar_std == 2 else 0.0
+                precio_ar_prem = 0.625 if valor_ar_prem == 1 else 1.25 if valor_ar_prem == 2 else 0.0
+                # El precio real de HC es el precio base menos lo que ya se cobró en AR
+                precio_real = precio_hc_base - (precio_ar_std + precio_ar_prem)
+                if precio_real < 0:
+                    precio_real = 0.0
+                suma_hc += precio_real
     return suma_hc
 def contar_trabajos_ar_standard(input_file):
     """

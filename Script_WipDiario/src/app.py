@@ -166,7 +166,7 @@ if __name__ == '__main__':
             cursor.execute(sql_insert_datos, (fecha_actual, count_nvi, count_ink, count_hoya, 'wip total', None, None))
             
             # Procesar archivo inarcc
-            input_file_inarcc = 'I:/VISION/A_INARCC.txt'
+            input_file_inarcc = 'I:/VISION/A_ALVIB.txt'
             data_to_insert_inarcc = process_inarcc_file(input_file_inarcc)
             for record in data_to_insert_inarcc:
                 cursor.execute(sql_insert_datos, (fecha_actual, record[0], record[1], record[2], 'recibidos', record[4], record[3]))
@@ -182,7 +182,7 @@ if __name__ == '__main__':
             cursor.execute(sql_insert_datos, (fecha_actual, count_nvi, count_ink, count_hoya, 'cancelados', None, None))
             
             # Procesar razones de cancelados
-            input_file_new = 'I:/VISION/A_THO20.txt'  # Cambia el nombre del archivo según sea necesario
+            input_file_new = 'I:/VISION/A_RZNC.txt'  # Cambia el nombre del archivo según sea necesario
             data_to_insert_new = process_new_file_with_translation(input_file_new)
             sql_insert_new_table = """
             INSERT INTO razones_cancelados (
