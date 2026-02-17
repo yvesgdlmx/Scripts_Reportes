@@ -38,7 +38,7 @@ def process_stations_file(filename):
         "147 Q-NVI CR39", "148 Q-NVI PLY AR", "149 Q-NVI TRACE", "150 Q-DIG CALC", "151 Q-CALC FAIL",
         "152 Q-NVI JOBS", "153 Q-NVI NO ES", "154 Q-NVI AR", "155 Q-NVI NO QOH", "Q-HOYA JOBS",
         "Q-HOYA BAD PICK", "Q-LENS ISSUE", "Q-INK", "Q-HIPWR", "Q-HOYA NO QOH", "Q-INK NO QOH",
-        "Q-JAI KUDO JOBS", "OPTIMEX", "INK LIFT OPTICS", "166 POLY AR F", "167 CR AR F", "168 CR 75",
+        "Q-JAI KUDO JOBS", "OPTIMEX", "INK LIFT OPTICS", "166 POLY AR F", "167 CR AR F", "168 CR 75", "169 AR FRAME P",
     }
     station_counts = {}
     # Se crearán dos diccionarios para acumular los valores NO surtidos de ARSemi y SinAR Semi (solo para registros con tipo S)

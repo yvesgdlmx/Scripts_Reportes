@@ -27,21 +27,21 @@ def process_enviados_file(input_file):
                 except ValueError:
                     continue # si no se puede convertir ignorar ese registro
                 # Clasificar los trabajos segun el tipo
-                if job_type == 'NV':
+                # INK y HO siempre son semifinish
+                if job_type == 'INK' or job_type == 'HO':
+                    total_semifinish += job_count
+                else:
+                    # Para todos los demás tipos (NV, 1, etc.) clasificar según status
                     if job_status == 'S': # Contar trabajos seminifinish (Status 'S')
                         total_semifinish += job_count
                     elif job_status == 'F': # Contar trabajos finished (Status 'F')
                         total_finished += job_count
-                elif job_type == 'INK':
-                    total_semifinish += job_count # INK siempre es semifinish, suma al total_semifinish
-                elif job_type == 'HO':
-                    total_semifinish += job_count # HO siempre es semifinish, suma al total_semifinish
     # Si no se encontraron datos validos, mostrar mensaje
     if not data_found:
         print("No se encontraron datos válidos en el archivo. insertando ceros.")
     # Retornar los totales que necesitamos para la tabla resumen_resultado
     return total_semifinish, total_finished
-
+    
 # Función para procesar el archivo net.txt y extraer la facturación <-------------------------------------------------------------|
 def process_net_file(input_file):
     """
