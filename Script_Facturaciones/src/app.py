@@ -53,20 +53,19 @@ def extraer_total_real(archivo):
     return total_real
 def obtener_fecha_insercion():
     """
-    Calcula la fecha de inserción de acuerdo a la siguiente lógica:
-      - Cuando el día actual es viernes o sábado, se establece la fecha del siguiente lunes.
-      - En cualquier otro día se toma la fecha del día siguiente.
+    Si hoy es viernes, suma 3 días (lunes).
+    Si hoy es sábado, suma 2 días (lunes).
+    En cualquier otro caso, usa la fecha de hoy.
     """
     hoy = datetime.now()
-    dia_semana = hoy.weekday()  # lunes=0, martes=1, ..., domingo=6
-    if dia_semana == 4:          # viernes
-        dias_a_sumar = 3       # viernes + 3 = lunes
-    elif dia_semana == 5:        # sábado
-        dias_a_sumar = 2       # sábado + 2 = lunes
+    dia_semana = hoy.weekday()  # lunes=0, ..., domingo=6
+    if dia_semana == 4:      # viernes
+        dias_a_sumar = 3
+    elif dia_semana == 5:    # sábado
+        dias_a_sumar = 2
     else:
-        dias_a_sumar = 1       # cualquier otro día: el siguiente día
-    fecha_insercion = hoy + timedelta(days=dias_a_sumar)
-    return fecha_insercion
+        dias_a_sumar = 0    # cualquier otro día: hoy
+    return hoy + timedelta(days=dias_a_sumar)
 def main_nvi():
     input_file = 'I:/VISION/A_KMNVI.txt'  # Actualiza la ruta según corresponda.
     registros = process_file(input_file)

@@ -51,14 +51,14 @@ def categorize_station(estacion):
     print(f"Debug - Estación: '{estacion}' -> First part: '{first_part}'")
     
     # EN AR
-    en_ar_stations = {"52", "53", "54", "55", "56", "46", "48", "49", "50", "91", "92", "60", "OTB", "44", "66"}
+    en_ar_stations = {"52", "53", "54", "55", "56", "46", "48", "49", "50", "91", "92", "60", "OTB", "44", "66" "62"}
     if first_part in en_ar_stations:
         print(f"Debug - '{first_part}' encontrado en en_ar_stations")
         return "en_ar"
     
     # ANTES DE AR
-    antes_de_ar_stations = {"19", "20", "219", "220", "221", "223", "224", "225", "226", "239", "240", "241", "242", 
-                           "250", "245", "246", "244", "243", "247", "248", "255", "256", "257", 
+    antes_de_ar_stations = {"19", "20", "81", "94", "218", "219", "220", "221", "222" "223", "224", "225", "226", "239", "240" "241", "242", 
+                           "250", "245", "246", "244", "243", "247", "248", "249", "255", "256", "257", 
                            "258", "259", "260", "261", "262", "265", "266", "267", "268", "269", 
                            "254", "270", "271", "272", "273", "274", "275", "400", "222", "80", "85", "335", "249"}
     if first_part in antes_de_ar_stations:
@@ -66,7 +66,7 @@ def categorize_station(estacion):
         return "antes_de_ar"
     
     # SIN SURTIR
-    sin_surtir_stations = {"135", "140", "147", "152", "148", "137", "151", "154", "134", "136", "141", "155", "169", "170"}
+    sin_surtir_stations = {"135", "140", "147", "152", "148", "137", "151", "154", "134", "136", "141", "155", "166", "167", "169", "170"}
     if first_part in sin_surtir_stations:
         print(f"Debug - '{first_part}' encontrado en sin_surtir_stations")
         return "sin_surtir"
@@ -78,7 +78,8 @@ def categorize_station(estacion):
         return "recalculando"
     
     # BREAKAGE
-    if first_part == "BREAKAGE":
+    merma_stations = {"BREAKAGE", "212"}
+    if first_part in merma_stations:
         print(f"Debug - '{first_part}' es BREAKAGE")
         return "breakage"
     
